@@ -1,12 +1,41 @@
 import { Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { CardModule } from 'primeng/card';
+import { TableModule } from 'primeng/table';
+import { ProgressBarModule } from 'primeng/progressbar';
+import { ButtonModule } from 'primeng/button';
+import { TagModule } from 'primeng/tag';
+import { InputTextModule } from 'primeng/inputtext';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
+  standalone: true,
+  imports: [
+    CardModule,
+    TableModule,
+    ProgressBarModule,
+    ButtonModule,
+    TagModule,
+    InputTextModule   // ✅ ADD THIS
+  ],
   templateUrl: './app.component.html',
-  styleUrl: './app.component.css'
+  styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-  title = 'fleet-dashboard';
+
+  halts = [
+    {
+      date: '16-06-2025 15:39',
+      vehicle: '749SRJ140H',
+      location: 'Gurgaon Workshop',
+      days: 272,
+      reason: 'Driver Issue'
+    },
+    {
+      date: '24-05-2025 14:09',
+      vehicle: '3557RJ470A',
+      location: 'Gurgaon Workshop',
+      days: 264,
+      reason: 'Driver Issue'
+    }
+  ];
 }
