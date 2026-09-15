@@ -38,7 +38,4 @@ export class AppComponent {
       reason: 'Driver Issue'
     }
   ];
- getTotalDays(): number {
-    return this.halts.reduce((total, halt) => total + halt.day, 0);
-  }
 }
