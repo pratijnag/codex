@@ -11,6 +11,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -25,7 +26,7 @@ jobs:
           # If you'd rather bill this against separate API usage instead of a
           # Team seat, replace the line above with:
           # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          direct_prompt: |
+          prompt: |
             Review this pull request's diff. Focus on:
             - Correctness bugs and edge cases
             - Security issues (hardcoded secrets/keys, unsafe DOM/HTTP usage)
