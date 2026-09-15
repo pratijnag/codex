@@ -36,5 +36,28 @@ jobs:
           - Code quality problems
           - Potential breaking changes
 
-          Provide a concise review with the issues found.
-          Do not modify any files." < commit.diff
+          Compare the latest commit with its parent commit.
+
+          Provide a concise review with:
+          - Issues found
+          - Severity
+          - File and line number where possible
+          - Suggested fix
+
+          Do not modify any files." < commit.diff > review.txt
+
+          echo "===== CLAUDE REVIEW ====="
+          cat review.txt
+
+      - name: Send review by email
+        uses: dawidd6/action-send-mail@v6
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "Claude Commit Review - ${{ github.repository }}"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: file://review.txt
