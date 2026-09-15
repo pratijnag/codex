@@ -1,0 +1,36 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # If you'd rather bill this against separate API usage instead of a
+          # Team seat, replace the line above with:
+          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            Review this pull request's diff. Focus on:
+            - Correctness bugs and edge cases
+            - Security issues (hardcoded secrets/keys, unsafe DOM/HTTP usage)
+            - RxJS subscriptions with no teardown (missing ngOnDestroy)
+            - Use of `any` where a real type is available
+            - Duplicated logic that already exists elsewhere in the codebase
+            Leave inline comments on the changed lines, then a short summary
+            comment. Do not comment on style nits that a linter would catch.
