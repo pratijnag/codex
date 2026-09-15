@@ -1,0 +1,37 @@
+name: Claude Commit Review
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Review the latest commit on the main branch.
+
+            Check for:
+            - Bugs or incorrect logic
+            - Security issues
+            - Code quality problems
+            - Potential breaking changes
+
+            Compare the latest commit with its parent commit.
+            Provide a concise review with the issues found.
+            Do not modify any files.
