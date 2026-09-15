@@ -19,19 +19,22 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Run Claude Code Review
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          prompt: |
-            Review the latest commit on the main branch.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
 
-            Check for:
-            - Bugs or incorrect logic
-            - Security issues
-            - Code quality problems
-            - Potential breaking changes
+      - name: Review latest commit
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          git diff HEAD^ HEAD > commit.diff
 
-            Compare the latest commit with its parent commit.
-            Provide a concise review with the issues found.
-            Do not modify any files.
+          claude -p "Review the latest commit using commit.diff.
+
+          Check for:
+          - Bugs or incorrect logic
+          - Security issues
+          - Code quality problems
+          - Potential breaking changes
+
+          Provide a concise review with the issues found.
+          Do not modify any files." < commit.diff
