@@ -14,14 +14,17 @@ jobs:
       id-token: write
 
     steps:
+      # STEP 1: Checkout latest commit
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
+      # STEP 2: Install Claude Code
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
+      # STEP 3: Generate Claude review
       - name: Review latest commit
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -44,11 +47,31 @@ jobs:
           - File and line number where possible
           - Suggested fix
 
+          If issues are found, clearly list them.
+
+          If there are no issues, reply:
+          No issues found. Looks good to merge.
+
           Do not modify any files." < commit.diff > review.txt
 
           echo "===== CLAUDE REVIEW ====="
           cat review.txt
 
+      # STEP 4: Create email content
+      - name: Prepare email
+        run: |
+          echo "Claude Commit Review" > email.txt
+          echo "" >> email.txt
+          echo "Repository: ${{ github.repository }}" >> email.txt
+          echo "Branch: main" >> email.txt
+          echo "Commit: ${{ github.sha }}" >> email.txt
+          echo "Commit Message: ${{ github.event.head_commit.message }}" >> email.txt
+          echo "" >> email.txt
+          echo "========================================" >> email.txt
+          echo "" >> email.txt
+          cat review.txt >> email.txt
+
+      # STEP 5: Send Claude review by email
       - name: Send review by email
         uses: dawidd6/action-send-mail@v6
         with:
@@ -57,7 +80,7 @@ jobs:
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: "Claude Commit Review - ${{ github.repository }}"
-          to: ${{ secrets.MAIL_TO }}
           from: ${{ secrets.MAIL_USERNAME }}
-          body: file://review.txt
+          to: ${{ secrets.MAIL_TO }}
+          subject: "Claude Commit Review - ${{ github.repository }}"
+          body: file://email.txt
