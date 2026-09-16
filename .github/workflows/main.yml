@@ -63,7 +63,7 @@ jobs:
         id: run_claude
         uses: anthropics/claude-code-action@v1   # official, actively maintained Anthropic action
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}   # secret set in repo settings
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}   # secret set in repo settings
           github_token: ${{ secrets.GITHUB_TOKEN }}   # use the built-in token — avoids needing the Claude GitHub App installed
           claude_args: |
             --allowedTools "Read,Bash(git diff:*)"
