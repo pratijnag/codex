@@ -14,130 +14,73 @@ jobs:
       id-token: write
 
     steps:
-
-      # STEP 1: Checkout the latest commit
+      # STEP 1: Checkout latest commit
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      # STEP 2: Run Claude review
-      - name: Run Claude review
-        id: run_claude
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+      # STEP 2: Install Claude Code
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
 
-          claude_args: |
-            --allowedTools "Read,Bash(git diff:*)"
-            --max-turns 3
-            --model claude-sonnet-5
-
-          prompt: |
-            You are reviewing the latest commit on the main branch.
-
-            Review ONLY the changes in the latest commit.
-
-            Use:
-            git diff HEAD^ HEAD
-
-            Check for:
-            - Bugs or incorrect logic
-            - Security issues
-            - Code quality problems
-            - Potential breaking changes
-            - Incorrect property or variable names
-            - Null/reference errors
-            - Unused or dead code
-            - Exception handling problems
-
-            For every issue found provide:
-
-            **File:**
-            **Line:**
-            **Severity:**
-            **Problem:**
-            **Recommendation:**
-            **Code:**
-
-            If no issues are found, reply ONLY:
-
-            No issues found. Looks good to merge.
-
-      # STEP 3: Extract Claude's final review
-      - name: Extract review
-        id: extract_review
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-
-            let output =
-              "No review content returned. Check the GitHub Actions logs.";
-
-            try {
-              const file =
-                '${{ steps.run_claude.outputs.execution_file }}';
-
-              if (file && fs.existsSync(file)) {
-                const log =
-                  JSON.parse(fs.readFileSync(file, 'utf8'));
-
-                for (let i = log.length - 1; i >= 0; i--) {
-                  if (
-                    log[i]?.type === 'result' &&
-                    typeof log[i].result === 'string'
-                  ) {
-                    output = log[i].result;
-                    break;
-                  }
-                }
-              }
-            } catch (e) {
-              core.warning(e.message);
-            }
-
-            core.setOutput('final_message', output);
-
-      # STEP 4: Save review to email file
-      - name: Prepare email
-        if: always()
+      # STEP 3: Generate Claude review
+      - name: Review latest commit
         env:
-          CLAUDE_OUTPUT: ${{ steps.extract_review.outputs.final_message }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          {
-            echo "Claude Commit Review"
-            echo ""
-            echo "Repository: ${{ github.repository }}"
-            echo "Branch: main"
-            echo "Commit: ${{ github.sha }}"
-            echo "Commit Message: ${{ github.event.head_commit.message }}"
-            echo ""
-            echo "========================================"
-            echo ""
-            echo "$CLAUDE_OUTPUT"
-          } > email.txt
+          git diff HEAD^ HEAD > commit.diff
 
-      # STEP 5: Send email immediately after review
+          claude -p "Review the latest commit using commit.diff.
+
+          Check for:
+          - Bugs or incorrect logic
+          - Security issues
+          - Code quality problems
+          - Potential breaking changes
+
+          Compare the latest commit with its parent commit.
+
+          Provide a concise review with:
+          - Issues found
+          - Severity
+          - File and line number where possible
+          - Suggested fix
+
+          If issues are found, clearly list them.
+
+          If there are no issues, reply:
+          No issues found. Looks good to merge.
+
+          Do not modify any files." < commit.diff > review.txt
+
+          echo "===== CLAUDE REVIEW ====="
+          cat review.txt
+
+      # STEP 4: Create email content
+      - name: Prepare email
+        run: |
+          echo "Claude Commit Review" > email.txt
+          echo "" >> email.txt
+          echo "Repository: ${{ github.repository }}" >> email.txt
+          echo "Branch: main" >> email.txt
+          echo "Commit: ${{ github.sha }}" >> email.txt
+          echo "Commit Message: ${{ github.event.head_commit.message }}" >> email.txt
+          echo "" >> email.txt
+          echo "========================================" >> email.txt
+          echo "" >> email.txt
+          cat review.txt >> email.txt
+
+      # STEP 5: Send Claude review by email
       - name: Send review by email
-        if: always()
         uses: dawidd6/action-send-mail@v6
         with:
-          connection_url: ${{ secrets.MAIL_CONNECTION_URL }}
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: ${{ secrets.MAIL_USERNAME }}
           to: ${{ secrets.MAIL_TO }}
-          from: ${{ secrets.MAIL_FROM }}
           subject: "Claude Commit Review - ${{ github.repository }}"
           body: file://email.txt
-
-      # STEP 6: Show review in Actions log
-      - name: Show Claude review
-        if: always()
-        env:
-          CLAUDE_OUTPUT: ${{ steps.extract_review.outputs.final_message }}
-        run: |
-          echo "========================================"
-          echo "CLAUDE COMMIT REVIEW"
-          echo "========================================"
-          echo "$CLAUDE_OUTPUT"
