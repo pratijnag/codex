@@ -1,32 +1,39 @@
 name: Claude Commit Review
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to review"
+        required: true
+        type: string
+      pusher_email:
+        description: "Email address of the person who pushed the commit"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   review:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      id-token: write
-
     steps:
 
-      # STEP 1: Checkout the latest commit
-      - name: Checkout repository
+      # STEP 1: Checkout the PR's head commit
+      - name: Checkout pull request
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          ref: refs/pull/${{ inputs.pr_number }}/head
+          fetch-depth: 0
 
       # STEP 2: Run Claude review
       - name: Run Claude review
         id: run_claude
         uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
           claude_args: |
@@ -35,12 +42,12 @@ jobs:
             --model claude-sonnet-5
 
           prompt: |
-            You are reviewing the latest commit on the main branch.
+            You are reviewing pull request #${{ inputs.pr_number }}.
 
-            Review ONLY the changes in the latest commit.
+            Review ONLY the changes introduced by this pull request.
 
             Use:
-            git diff HEAD^ HEAD
+            git diff origin/main...HEAD
 
             Check for:
             - Bugs or incorrect logic
@@ -111,24 +118,22 @@ jobs:
             echo "Claude Commit Review"
             echo ""
             echo "Repository: ${{ github.repository }}"
-            echo "Branch: main"
-            echo "Commit: ${{ github.sha }}"
-            echo "Commit Message: ${{ github.event.head_commit.message }}"
+            echo "Pull Request: #${{ inputs.pr_number }}"
             echo ""
             echo "========================================"
             echo ""
             echo "$CLAUDE_OUTPUT"
           } > email.txt
 
-      # STEP 5: Send email immediately after review
+      # STEP 5: Send email to the person who pushed the commit
       - name: Send review by email
         if: always()
         uses: dawidd6/action-send-mail@v6
         with:
           connection_url: ${{ secrets.MAIL_CONNECTION_URL }}
-          to: ${{ secrets.MAIL_TO }}
+          to: ${{ inputs.pusher_email }}
           from: ${{ secrets.MAIL_FROM }}
-          subject: "Claude Commit Review - ${{ github.repository }}"
+          subject: "Claude Commit Review - ${{ github.repository }} PR #${{ inputs.pr_number }}"
           body: file://email.txt
 
       # STEP 6: Show review in Actions log
