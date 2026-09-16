@@ -1,48 +1,46 @@
-name: Claude Commit Review
+name: Claude Review
 
 on:
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: "Pull request number to review"
-        required: true
-        type: string
-      pusher_email:
-        description: "Email address of the person who pushed the commit"
-        required: true
-        type: string
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: claude-pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
+  issues: write
 
 jobs:
   review:
     runs-on: ubuntu-latest
     steps:
-
-      # STEP 1: Checkout the PR's head commit
-      - name: Checkout pull request
+      - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          ref: refs/pull/${{ inputs.pr_number }}/head
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      # STEP 2: Run Claude review
+      - name: Get pusher email
+        id: pusher
+        run: |
+          EMAIL=$(git log -1 --format='%ae' "${{ github.event.pull_request.head.sha }}")
+          echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
+
       - name: Run Claude review
         id: run_claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-
           claude_args: |
             --allowedTools "Read,Bash(git diff:*)"
             --max-turns 3
             --model claude-sonnet-5
-
           prompt: |
-            You are reviewing pull request #${{ inputs.pr_number }}.
+            You are reviewing pull request #${{ github.event.pull_request.number }}.
 
             Review ONLY the changes introduced by this pull request.
 
@@ -72,7 +70,6 @@ jobs:
 
             No issues found. Looks good to merge.
 
-      # STEP 3: Extract Claude's final review
       - name: Extract review
         id: extract_review
         if: always()
@@ -80,69 +77,58 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-
-            let output =
-              "No review content returned. Check the GitHub Actions logs.";
-
+            let output = "No review content returned. Check the GitHub Actions logs.";
             try {
-              const file =
-                '${{ steps.run_claude.outputs.execution_file }}';
-
+              const file = '${{ steps.run_claude.outputs.execution_file }}';
               if (file && fs.existsSync(file)) {
-                const log =
-                  JSON.parse(fs.readFileSync(file, 'utf8'));
-
+                const log = JSON.parse(fs.readFileSync(file, 'utf8'));
                 for (let i = log.length - 1; i >= 0; i--) {
-                  if (
-                    log[i]?.type === 'result' &&
-                    typeof log[i].result === 'string'
-                  ) {
+                  if (log[i]?.type === 'result' && typeof log[i].result === 'string') {
                     output = log[i].result;
                     break;
                   }
                 }
               }
-            } catch (e) {
-              core.warning(e.message);
-            }
-
+            } catch (e) { core.warning(e.message); }
             core.setOutput('final_message', output);
 
-      # STEP 4: Save review to email file
+      - name: Post PR comment
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          CLAUDE_OUTPUT: ${{ steps.extract_review.outputs.final_message }}
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.pull_request.number }},
+              body: process.env.CLAUDE_OUTPUT
+            });
+
       - name: Prepare email
         if: always()
         env:
           CLAUDE_OUTPUT: ${{ steps.extract_review.outputs.final_message }}
         run: |
           {
-            echo "Claude Commit Review"
+            echo "Claude PR Review"
             echo ""
             echo "Repository: ${{ github.repository }}"
-            echo "Pull Request: #${{ inputs.pr_number }}"
+            echo "Pull Request: #${{ github.event.pull_request.number }}"
+            echo "Commit: ${{ github.event.pull_request.head.sha }}"
             echo ""
             echo "========================================"
             echo ""
             echo "$CLAUDE_OUTPUT"
           } > email.txt
 
-      # STEP 5: Send email to the person who pushed the commit
       - name: Send review by email
         if: always()
         uses: dawidd6/action-send-mail@v6
         with:
           connection_url: ${{ secrets.MAIL_CONNECTION_URL }}
-          to: ${{ inputs.pusher_email }}
+          to: ${{ steps.pusher.outputs.email }}
           from: ${{ secrets.MAIL_FROM }}
-          subject: "Claude Commit Review - ${{ github.repository }} PR #${{ inputs.pr_number }}"
+          subject: "Claude PR Review - ${{ github.repository }} #${{ github.event.pull_request.number }}"
           body: file://email.txt
-
-      # STEP 6: Show review in Actions log
-      - name: Show Claude review
-        if: always()
-        env:
-          CLAUDE_OUTPUT: ${{ steps.extract_review.outputs.final_message }}
-        run: |
-          echo "========================================"
-          echo "CLAUDE COMMIT REVIEW"
-          echo "========================================"
-          echo "$CLAUDE_OUTPUT"
