@@ -2,7 +2,7 @@ name: Claude Commit Review
 
 on:
   push:
-    branches:
+    branches-ignore:
       - main
 
 jobs:
@@ -11,6 +11,7 @@ jobs:
 
     permissions:
       contents: read
+      pull-requests: write
       id-token: write
 
     steps:
@@ -22,6 +23,31 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
+      # NEW: Create PR if it doesn't exist
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${{ github.ref_name }}"
+
+          PR_NUMBER=$(gh pr list \
+            --head "$BRANCH" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -z "$PR_NUMBER" ]; then
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "Auto PR: $BRANCH" \
+              --body "Automatically created Pull Request."
+          else
+            echo "PR already exists: #$PR_NUMBER"
+          fi
+
+      # EXISTING: Review latest commit
       - name: Review latest commit
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -37,4 +63,35 @@ jobs:
           - Potential breaking changes
 
           Provide a concise review with the issues found.
-          Do not modify any files." < commit.diff
+          Do not modify any files." < commit.diff | tee review.txt
+
+      # NEW: Send email after review
+      - name: Send Review Email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+
+          subject: Claude Review - ${{ github.repository }}
+
+          to: ${{ github.event.head_commit.author.email }}
+
+          from: Claude Code Review
+
+          body: |
+            Hello,
+
+            Claude has completed the code review.
+
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.event.head_commit.author.name }}
+
+            The detailed review is attached.
+
+          attachments: review.txt
